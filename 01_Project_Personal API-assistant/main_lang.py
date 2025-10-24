@@ -1,19 +1,20 @@
-import logging
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
-from openai import OpenAI
+import logging  # Импорт стандартного модуля для логирования событий и ошибок в приложении
+from telegram import Update  # Импорт класса Update для получения информации об обновлениях Telegram
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes  # Импорт инструментов для создания и управления Telegram-ботом
+from openai import OpenAI  # Импортируем OpenAI для работы с их API
 
-from src import *
+from src import *  # Импорт всех настроек, включая токены и ключи, из локального файла настроек
 
 # --- Логирование ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)  # Устанавливаем базовый уровень логирования — INFO
+logger = logging.getLogger(__name__)  # Получаем объект логгера для текущего модуля
 
 # --- Инициализация клиента OpenAI ---
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY)  # Инициализируем клиент OpenAI с помощью API-ключа
 
 # --- Приветствие ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Асинхронная функция для обработки команды /start. Отправляет приветственное сообщение пользователю Telegram
     await update.message.reply_text(
         "👋 Привет! Я бот-помощник через OpenAI Responses API.\n"
         "Отправь любое сообщение, и я передам его модели GPT-4o."
@@ -21,21 +22,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Обработка сообщений ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    status_msg = await update.message.reply_text("⏳ Обрабатываю запрос...")
+    user_message = update.message.text  # Получаем текст сообщения пользователя
+    status_msg = await update.message.reply_text("⏳ Обрабатываю запрос...")  # Отправляем пользователю статус о начале обработки
 
     try:
-        response_text = get_openai_response(user_message)
-        await status_msg.edit_text(response_text)
+        response_text = get_openai_response(user_message)  # Получаем ответ от OpenAI по сообщению пользователя
+        await status_msg.edit_text(response_text)  # Обновляем статусное сообщение реальным ответом от модели
     except Exception as e:
-        logger.error(e)
-        await update.message.reply_text("Ошибка при обработке запроса. Попробуйте позже.")
+        logger.error(e)  # Логируем ошибку в процессе работы
+        await update.message.reply_text("Ошибка при обработке запроса. Попробуйте позже.")  # Сообщаем пользователю об ошибке
 
 # --- Функция запроса к OpenAI ---
 def get_openai_response(user_input: str) -> str:
     """Возвращает ответ модели GPT-4o через Responses API."""
     response = client.responses.create(
-        model="gpt-4o-mini",
+        model="gpt-4o-mini",  # Используем модель GPT-4o-mini для генерации ответа
         input=[
             {"role": "system", "content": """
                  Роль модели: маркетолог и контент-редактор маркетплейсов (Ozon/Wildberries).
@@ -86,22 +87,19 @@ def get_openai_response(user_input: str) -> str:
                 🔹 **SEO-ключевые слова:**
                 [через запятую]
              """},
-            {"role": "user", "content": user_input}
+            {"role": "user", "content": user_input}  # Передаём сообщение пользователя как вход для модели
         ]
     )
-    return response.output_text
+    return response.output_text  # Возвращаем полученный от модели текст
 
 def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()  # Создаём объект приложения Telegram-бота с заданным токеном
+    app.add_handler(CommandHandler("start", start))  # Добавляем обработчик команды /start
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Добавляем обработчик обычных текстовых сообщений
 
-    print("✅ Бот запущен!")
-    app.run_polling()
+    print("✅ Бот запущен!")  # Печатаем сообщение о запуске бота в консоль
+    app.run_polling()  # Запускаем polling и начинаем ожидание новых сообщений
 
 # --- Точка входа ---
 if __name__ == "__main__":
-    main()
-
-
-
+    main()  # Запускаем основную функцию при запуске скрипта напрямую
