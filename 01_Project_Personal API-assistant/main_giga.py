@@ -1,33 +1,35 @@
-import logging
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
-from langchain_gigachat.chat_models import GigaChat
-from langchain_core.messages import HumanMessage
+import logging  # Импорт стандартного модуля для логирования сообщений и событий
 
-from src import TELEGRAM_TOKEN, GIGACHAT_CREDENTIALS
+from telegram import Update  # Класс Update — для получения информации о входящих сообщениях Telegram
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes  # Импортируем компоненты для структуры и обработки событий Telegram-бота
+from langchain_gigachat.chat_models import GigaChat  # Импортируем класс GigaChat для взаимодействия с моделью GigaChat
+from langchain_core.messages import HumanMessage  # Импорт сообщения от пользователя для передачи в LLM
+
+from src import TELEGRAM_TOKEN, GIGACHAT_CREDENTIALS  # Получаем токен Telegram и учетные данные GigaChat из своего модуля конфигов
 
 # --- Логирование ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)  # Настраиваем базовый уровень логирования как INFO — для вывода основных событий
+logger = logging.getLogger(__name__)  # Создаём экземпляр логгера для текущего файла
 
 # --- Инициализация клиента GigaChat ---
 giga = GigaChat(
-    model="GigaChat-2-Max",
-    credentials=GIGACHAT_CREDENTIALS,
-    scope='GIGACHAT_API_PERS',
-    verify_ssl_certs=False,
-    profanity_check=True
+    model="GigaChat-2-Max",  # Указываем модель GigaChat для работы
+    credentials=GIGACHAT_CREDENTIALS,  # Обязательные учетные данные для API
+    scope='GIGACHAT_API_PERS',  # Определяем область авторизации — персональные ключи
+    verify_ssl_certs=False,  # Отключаем проверку SSL-сертификатов (если возникает ошибка в тестовой среде)
+    profanity_check=True  # Включаем фильтрацию нежелательных выражений
 )
 
 # --- Предзагруженный файл с контекстом ---
-with open(r"./data/Full_instruction_Create_Cards_WB_RDV_Market.pdf", "rb") as f:
-    uploaded_file = giga.upload_file(f)
+with open(r"./data/Full_instruction_Create_Cards_WB_RDV_Market.pdf", "rb") as f:  # Открываем PDF-файл с инструкцией в режиме двоичного чтения
+    uploaded_file = giga.upload_file(f)  # Загружаем файл в GigaChat через встроенный метод
 
-FILE_ID = uploaded_file.id_ 
-print("ID предзагруженного файла:", FILE_ID)
+FILE_ID = uploaded_file.id_  # Получаем уникальный идентификатор для загруженного файла
+print("ID предзагруженного файла:", FILE_ID)  # Выводим ID файла в консоль (для отладки или логирования)
 
 # --- Приветственное сообщение ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Асинхронная функция для обработки команды /start — отвечает приветствием и инструкцией для пользователя
     await update.message.reply_text(
         "👋 Привет! Я бот-помощник через GigaChat.\n"
         "Отправь любое сообщение, и я создам карточку товара с учётом предзагруженного контекста."
@@ -35,9 +37,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Основная логика ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
+    user_message = update.message.text  # Извлекаем текст сообщения пользователя
 
-    status_msg = await update.message.reply_text("⏳ Обрабатываю запрос через GigaChat...")
+    status_msg = await update.message.reply_text("⏳ Обрабатываю запрос через GigaChat...")  # Сообщаем пользователю о начале обработки
 
     try:
         messages = [
@@ -59,7 +61,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 3) 3 главные выгоды/УТП, которые нужно подчеркнуть.
                 4) Список 4–6 характеристик из контекста, которые обязательно необходимо включить.
                 5) Возможные пробелы в данных (если что-то важное не указано — коротко).
-
 
                 Стиль: информативный, продающий, с упором на выгоду.
                 Ограничение: до 500 слов.
@@ -92,34 +93,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [через запятую]
             """),
             HumanMessage(
-                content=user_message,
+                content=user_message,  # Текст вопроса пользователя
                 additional_kwargs={
-                    "attachments": [FILE_ID] 
+                    "attachments": [FILE_ID]  # Передаём идентификатор файла с инструкцией в качестве вложения
                 }
             )
         ]
 
-       
-        resp = giga.invoke(messages, request_kwargs={"timeout": 180})  
-        response_text = resp.content if resp else "Нет ответа от GigaChat."
+        resp = giga.invoke(messages, request_kwargs={"timeout": 180})  # Отправляем запрос в GigaChat, увеличиваем таймаут до 180 секунд 
+        response_text = resp.content if resp else "Нет ответа от GigaChat."  # Если пришёл ответ — используем его, иначе возвращаем сообщение об ошибке
 
-        await status_msg.edit_text(response_text)
+        await status_msg.edit_text(response_text)  # Обновляем статусное сообщение, подставляя текст ответа от GigaChat
 
     except Exception as e:
-        logger.error(e)
-        await update.message.reply_text("Ошибка при обработке запроса. Попробуйте позже.")
+        logger.error(e)  # Логируем ошибку на стороне сервера
+        await update.message.reply_text("Ошибка при обработке запроса. Попробуйте позже.")  # Сообщаем пользователю о сбое
 
 # --- Запуск бота ---
 def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()  # Строим приложение Telegram с нужным токеном
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CommandHandler("start", start))  # Добавляем обработчик команды /start
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Добавляем обработчик всех текстовых сообщений, кроме команд
 
-    print("✅ Бот запущен!")
-    app.run_polling()
-
+    print("✅ Бот запущен!")  # Сообщение в консоль о запуске бота
+    app.run_polling()  # Запускаем polling-режим (бот постоянно проверяет обновления)
 
 if __name__ == "__main__":
-    main()
-
+    main()  # Запускаем функцию main при запуске файла напрямую
